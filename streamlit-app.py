@@ -1,3 +1,15 @@
+# example/st_app.py
+
+import streamlit as st
+from streamlit_gsheets import GSheetsConnection
+
+url = "https://docs.google.com/spreadsheets/d/1Ou0ZXVcLPkhdARBPnhfrp8cGq-zG2hPMnezQI8SZp2I/edit#gid=0y"
+
+conn = st.experimental_connection("gsheets", type=GSheetsConnection)
+
+data = conn.read(spreadsheet=url, usecols=[0, 1])
+st.dataframe(data)
+
 import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
@@ -37,16 +49,17 @@ def connect_to_db():
 engine = connect_to_db()
 # Function to insert data into the database
 def insert_candidate_data(candidate_data, engine):
-    Session = sessionmaker(bind=engine)
-    session = Session()
-    existing_candidate = session.query(Candidate).filter(Candidate.CANDIDATE_NAME == candidate_data["CANDIDATE_NAME"]).first()
-    if existing_candidate is not None:
-        session.close()
-        return False
-    new_candidate = Candidate(**candidate_data)
-    session.add(new_candidate)
-    session.commit()
-    session.close()
+    # Prepare data for Google Sheets insertion
+    sheet_data = [list(candidate_data.values())]
+
+    # Append the new data to the existing data in Google Sheets
+    updated_data = pd.concat([existing_data, pd.DataFrame(sheet_data, columns=existing_data.columns)], ignore_index=True)
+
+    # Update Google Sheets with the new data
+    # conn.update(worksheet="Sheet1", data=candidate_data)
+    conn.update(spreadsheet=spreadsheet_id, worksheet="Sheet1", data=updated_data)
+
+    st.success("Candidate details successfully submitted and stored in both the database and Google Sheets!")
     return True
 
 # # Establishing a Google Sheets connection
@@ -196,6 +209,7 @@ with st.form(key="vendor_form"):
                 updated_data = pd.concat([existing_data, pd.DataFrame(sheet_data, columns=existing_data.columns)], ignore_index=True)
 
                 # Update Google Sheets with the new data
+                # conn.update(worksheet="Sheet1", data=candidate_data)
                 conn.update(spreadsheet=spreadsheet_id, worksheet="Sheet1", data=updated_data)
 
                 st.success("Candidate details successfully submitted and stored in both the database and Google Sheets!")
