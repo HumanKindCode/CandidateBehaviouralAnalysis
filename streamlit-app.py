@@ -1,24 +1,32 @@
-# example/st_app.py
-
 import streamlit as st
-from streamlit_gsheets import GSheetsConnection
-
-url = "https://docs.google.com/spreadsheets/d/1Ou0ZXVcLPkhdARBPnhfrp8cGq-zG2hPMnezQI8SZp2I/edit#gid=0y"
-
-conn = st.experimental_connection("gsheets", type=GSheetsConnection)
-
-data = conn.read(spreadsheet=url, usecols=[0, 1])
-st.dataframe(data)
-
-import streamlit as st
-from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from sqlalchemy import create_engine, Column, String, Integer
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 import time
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
+
 Base = declarative_base()
 
+# Google Sheets connection setup
+def init_gspread_connection():
+    scope = ["https://spreadsheets.google.com/feeds",
+             "https://www.googleapis.com/auth/spreadsheets",
+             "https://www.googleapis.com/auth/drive.file",
+             "https://www.googleapis.com/auth/drive"]
+    creds = ServiceAccountCredentials.from_json_keyfile_name(".streamlit/behavioral-forms-90a681513583.json", scope)
+    client = gspread.authorize(creds)
+    return client
+
+def get_sheet_data(client, spreadsheet_id, worksheet_name):
+    sheet = client.open_by_key(spreadsheet_id).worksheet(worksheet_name)
+    data = pd.DataFrame(sheet.get_all_records())
+    return data
+
+client = init_gspread_connection()
+
+# Database setup
 class Candidate(Base):
     __tablename__ = 'candidates'
     id = Column(Integer, primary_key=True)
@@ -33,47 +41,41 @@ class Candidate(Base):
     ANSWER8 = Column(String)
     ANSWER9 = Column(String)
     ANSWER10 = Column(String)
-    ANSWER10 = Column(String)
     OPENNESS = Column(String)
     CONSCIENTIOUSNESS = Column(String)
     EXTRAVERSION = Column(String)
     AGREEBLENESS = Column(String)
     NEUROTICISM = Column(String)
 
-st.title("Candidate Psyche Analysis")
 def connect_to_db():
-    engine = create_engine('sqlite:///CandidateAnswers.db')  # Updated database file name
-    Base.metadata.create_all(engine)  # Create tables if they don't exist
+    engine = create_engine('sqlite:///CandidateAnswers.db')
+    Base.metadata.create_all(engine)
     return engine
 
 engine = connect_to_db()
+
 # Function to insert data into the database
 def insert_candidate_data(candidate_data, engine):
-    # Prepare data for Google Sheets insertion
-    sheet_data = [list(candidate_data.values())]
-
-    # Append the new data to the existing data in Google Sheets
-    updated_data = pd.concat([existing_data, pd.DataFrame(sheet_data, columns=existing_data.columns)], ignore_index=True)
-
-    # Update Google Sheets with the new data
-    # conn.update(worksheet="Sheet1", data=candidate_data)
-    conn.update(spreadsheet=spreadsheet_id, worksheet="Sheet1", data=updated_data)
-
-    st.success("Candidate details successfully submitted and stored in both the database and Google Sheets!")
+    Session = sessionmaker(bind=engine)
+    session = Session()
+    existing_candidate = session.query(Candidate).filter(Candidate.CANDIDATE_NAME == candidate_data["CANDIDATE_NAME"]).first()
+    if existing_candidate is not None:
+        session.close()
+        return False
+    new_candidate = Candidate(**candidate_data)
+    session.add(new_candidate)
+    session.commit()
+    session.close()
     return True
 
-# # Establishing a Google Sheets connection
-conn = st.connection("gsheets", type=GSheetsConnection)
+# Fetch existing data from Google Sheets
+spreadsheet_id = "1Ou0ZXVcLPkhdARBPnhfrp8cGq-zG2hPMnezQI8SZp2I"
+worksheet_name = "Sheet1"
+existing_data = get_sheet_data(client, spreadsheet_id, worksheet_name)
 
-# # Specify the spreadsheet ID or name
-spreadsheet_id = "CandidateBehaviouralSheet"
-
-# Fetch existing vendors data
-existing_data = conn.read(spreadsheet=spreadsheet_id, worksheet="Sheet1", usecols=list(range(16)), ttl=5)
-existing_data = existing_data.dropna(how="all")
-
+# Streamlit app layout
+st.title("Candidate Psyche Analysis")
 st.write(existing_data)
-
 QUESTION1_TYPES = [
     "Embraced the change and led the transition.",
     "Adapted gradually with some resistance.",
@@ -146,7 +148,6 @@ BIG5_QUESTIONS = {
     "Agreeableness": "Tell us about a time when you had a disagreement with a colleague. How did you resolve it?",
     "Neuroticism": "How do you react and cope when faced with a stressful situation at work?"
 }
-
 with st.form(key="vendor_form"):
     candidate_name = st.text_input(label="Candidate Name*")
     ANSWER_1 = st.selectbox("Describe a situation where you had to adapt to significant changes at work. How did you manage the transition?*", options=QUESTION1_TYPES, index=None)
@@ -166,16 +167,13 @@ with st.form(key="vendor_form"):
     NEUROTICISM = st.text_area(label=BIG5_QUESTIONS["Neuroticism"])
     
     st.markdown("**required*")
-
     submit_button = st.form_submit_button(label="Submit Vendor Details")
-    
-    # If the submit button is pressed
+       
     if submit_button:
-        # Check if all mandatory fields are filled
         if not candidate_name or not ANSWER_1 or not ANSWER_2:
             st.warning("Ensure all mandatory fields are filled.")
             st.stop()
-
+        
         else:
         # Prepare the data for insertion
             candidate_data = {
@@ -197,27 +195,14 @@ with st.form(key="vendor_form"):
                 "NEUROTICISM": NEUROTICISM
             }
             
-        success = insert_candidate_data(candidate_data, engine)
-        if success:
-            st.success("Candidate details successfully submitted and stored in the database!")
-            time.sleep(5)
+            success = insert_candidate_data(candidate_data, engine)
             if success:
                 # Prepare data for Google Sheets insertion
                 sheet_data = [list(candidate_data.values())]
-
-                # Append the new data to the existing data in Google Sheets
-                updated_data = pd.concat([existing_data, pd.DataFrame(sheet_data, columns=existing_data.columns)], ignore_index=True)
-
-                # Update Google Sheets with the new data
-                # conn.update(worksheet="Sheet1", data=candidate_data)
-                conn.update(spreadsheet=spreadsheet_id, worksheet="Sheet1", data=updated_data)
-
+                worksheet = client.open_by_key(spreadsheet_id).worksheet(worksheet_name)
+                worksheet.append_row(sheet_data[0])
                 st.success("Candidate details successfully submitted and stored in both the database and Google Sheets!")
                 time.sleep(5)
                 st.experimental_rerun()
             else:
                 st.warning("A candidate with this name already exists.")
-
-            st.experimental_rerun()
-        else:
-            st.warning("A candidate with this name already exists.")
