@@ -167,7 +167,7 @@ with st.form(key="vendor_form"):
     NEUROTICISM = st.text_area(label=BIG5_QUESTIONS["Neuroticism"])
     
     st.markdown("**required*")
-    submit_button = st.form_submit_button(label="Submit Vendor Details")
+    submit_button = st.form_submit_button(label="Submit Candidate Details")
        
     if submit_button:
         if not candidate_name or not ANSWER_1 or not ANSWER_2:
@@ -201,7 +201,7 @@ with st.form(key="vendor_form"):
                 sheet_data = [list(candidate_data.values())]
                 worksheet = client.open_by_key(spreadsheet_id).worksheet(worksheet_name)
                 worksheet.append_row(sheet_data[0])
-                st.success("Candidate details successfully submitted and stored in both the database and Google Sheets!")
+                st.success("Candidate details successfully submitted! Thank you.")
                 time.sleep(5)
                 st.experimental_rerun()
             else:
