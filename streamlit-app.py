@@ -75,7 +75,6 @@ existing_data = get_sheet_data(client, spreadsheet_id, worksheet_name)
 
 # Streamlit app layout
 st.title("Candidate Psyche Analysis")
-st.write(existing_data)
 QUESTION1_TYPES = [
     "Embraced the change and led the transition.",
     "Adapted gradually with some resistance.",
