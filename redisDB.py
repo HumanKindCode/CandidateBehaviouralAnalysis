@@ -8,7 +8,7 @@ cluster_hostname = 'cluster0.n9wsfyk.mongodb.net'
 database_name = 'CandidateAnswers'
 
 # MongoDB connection
-uri = f'mongodb+srv://{username}:{password}@{cluster_hostname}/{database_name}?retryWrites=true&w=majority'
+uri = f'mongodb+srv://{username}:{password}@cluster0.pye7uj8.mongodb.net/?retryWrites=true&w=majority'
 client = MongoClient(uri, server_api=ServerApi('1'))
 db = client['streamlit_app']  # Use your database name
 collection = db['user_data']  # Use your collection name
