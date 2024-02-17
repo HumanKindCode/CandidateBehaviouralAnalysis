@@ -1,41 +1,47 @@
 import streamlit as st
-import redis
+from pymongo import MongoClient
+from pymongo.server_api import ServerApi
 
-# Initialize the Redis connection
-r = redis.Redis(
-    host='redis-18655.c53.west-us.azure.cloud.redislabs.com',
-    port=18655,
-    password='suNPb7j7UafWJrPCymWwolAhO9auOmux'
-)
+username = 'humankindau'
+password = '1B0mB9GKxyBHYBnk'
+cluster_hostname = 'cluster0.n9wsfyk.mongodb.net'
+database_name = 'CandidateAnswers'
+
+# MongoDB connection
+uri = f'mongodb+srv://{username}:{password}@{cluster_hostname}/{database_name}?retryWrites=true&w=majority'
+client = MongoClient(uri, server_api=ServerApi('1'))
+db = client['streamlit_app']  # Use your database name
+collection = db['user_data']  # Use your collection name
 
 # Streamlit app
 def main():
-    st.title('Redis Data Storage App')
+    st.title('MongoDB Data Storage App')
 
     # User input
     user_name = st.text_input('Enter your name:')
-    user_data = st.text_input('Enter some data to store in Redis:')
+    user_data = st.text_area('Enter some data to store in MongoDB:')
 
-    # When the button is pressed, store the data in Redis
+    # When the button is pressed, store the data in MongoDB
     if st.button('Store Data'):
         if user_name and user_data:
-            # Use the user name as the key to store the data
-            r.set(user_name, user_data)
-            st.success('Data stored successfully!')
+            # Insert data into MongoDB
+            document = {'name': user_name, 'data': user_data}
+            collection.insert_one(document)
+            st.success('Data stored successfully in MongoDB!')
         else:
             st.error('Please fill in both fields.')
 
     # Retrieving data
     st.subheader('Retrieve Data')
-    search_name = st.text_input('Enter a name to retrieve data:', key='search')
+    search_name = st.text_input('Enter a name to retrieve data from MongoDB:', key='search')
     
     if st.button('Retrieve Data', key='retrieve'):
-        # Use the name to retrieve the data from Redis
-        data = r.get(search_name)
-        if data:
-            st.write(f'Data for {search_name}: {data.decode("utf-8")}')
+        # Use the name to retrieve the data from MongoDB
+        document = collection.find_one({'name': search_name})
+        if document:
+            st.write(f'Data for {search_name}: {document["data"]}')
         else:
-            st.error(f'No data found for {search_name}.')
+            st.error(f'No data found for {search_name} in MongoDB.')
 
 if __name__ == '__main__':
     main()
