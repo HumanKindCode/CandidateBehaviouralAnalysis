@@ -7,3 +7,5 @@ gspread
 redis
 numpy
 plotly
+openai
+matplotlib
