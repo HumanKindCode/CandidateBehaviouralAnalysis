@@ -5,3 +5,5 @@ oauth2client
 sqlalchemy
 gspread 
 redis
+pymongo
+dnspython
