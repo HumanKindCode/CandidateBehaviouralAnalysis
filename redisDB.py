@@ -3,8 +3,9 @@ from pymongo import MongoClient
 from pymongo.server_api import ServerApi
 
 # MongoDB setup
-uri = "mongodb+srv://humankindau:oyNSzBe9qyphEt6b@cluster0.8gp5zlf.mongodb.net/?retryWrites=true&w=majority"
-client = MongoClient(uri, server_api=ServerApi('1'))
+uri = "mongodb+srv://humankindau:akhbq7UC8R8On1pw@cluster0.8gp5zlf.mongodb.net/?retryWrites=true&w=majority"
+client = MongoClient(uri, server_api=ServerApi('1'), serverSelectionTimeoutMS=30000)
+
 db = client['CandidateResponses']  # Specify your database name
 collection = db['CandidateAnswers']  # Specify your collection name
 
