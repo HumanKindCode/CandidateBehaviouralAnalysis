@@ -928,24 +928,25 @@ def main():
                     collection = db["openness"]
                     # Send a ping to confirm a successful connection
                     try:
-                        client.admin.command('ping')
-                        print("Pinged your deployment. You successfully connected to MongoDB!")
-                        post = {
-                            "id":1,
-                            "name":"shaggy",
-                            "Leadership Style":7,
-                            "Understanding Team Dynamics":6,
-                            "Communication Skills":8,
-                            "Goal Setting":7,
-                            "Delegation Skills":5,
-                            "Adaptability and Flexibility":7,
-                            "Problem-Solving and Decision-Making":8,
-                            "Monitoring and Feedback":8,
-                            "Conflict Resolution":7,
-                            "Overall Assessment":8,
-                        }
-                    
-                        collection.insert_one(post)
+                        if st.button("Save Scores"):
+                            try:
+                                # MongoDB connection
+                                cluster = MongoClient("your_mongodb_connection_string")
+                                db = cluster["candidate"]
+                                collection = db["openness"]
+                                
+                                # Data to insert
+                                post = {
+                                    "id": 1,
+                                    "name": "shaggy",
+                                    # Add other fields as needed
+                                }
+                                
+                                # Insert data into MongoDB
+                                collection.insert_one(post)
+                                st.success("Scores successfully saved to MongoDB.")
+                            except Exception as e:
+                                st.error(f"An error occurred: {e}")
                     except Exception as e:
                         print(e)
 
