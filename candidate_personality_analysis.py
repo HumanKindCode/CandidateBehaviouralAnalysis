@@ -919,15 +919,35 @@ def main():
                 
                 if st.button("Save Scores"):
                     # Convert the processed_scores dictionary to a list and prepend the selected_candidate as the key
-                    scores_list = [selected_candidate] + list(processed_scores.values())
+                    uri = "mongodb+srv://humankindau:akhbq7UC8R8On1pw@cluster0.kgik9iy.mongodb.net/?retryWrites=true&w=majority"
+
+                    # Create a new client and connect to the server
+                    client = MongoClient(uri, server_api=ServerApi('1'))
+                    cluster = MongoClient("mongodb+srv://humankindau:akhbq7UC8R8On1pw@cluster0.kgik9iy.mongodb.net/?retryWrites=true&w=majority")
+                    db = cluster["candidate"]
+                    collection = db["openness"]
+                    # Send a ping to confirm a successful connection
+                    try:
+                        client.admin.command('ping')
+                        print("Pinged your deployment. You successfully connected to MongoDB!")
+                        post = {
+                            "id":1,
+                            "name":"shaggy",
+                            "Leadership Style":7,
+                            "Understanding Team Dynamics":6,
+                            "Communication Skills":8,
+                            "Goal Setting":7,
+                            "Delegation Skills":5,
+                            "Adaptability and Flexibility":7,
+                            "Problem-Solving and Decision-Making":8,
+                            "Monitoring and Feedback":8,
+                            "Conflict Resolution":7,
+                            "Overall Assessment":8,
+                        }
                     
-                    # Convert scores_list to a string to store in Redis
-                    scores_str = ','.join(map(str, scores_list))
-                    
-                    # Use the selected_candidate as the key and scores_str as the value
-                    r.set(selected_candidate, scores_str)
-                    
-                    st.success("Scores successfully saved to Redis.")
+                        collection.insert_one(post)
+                    except Exception as e:
+                        print(e)
 
     with tab3:
         if st.button("Analyze Conscientiousness", key="start_conscientiousness"):  # Unique key for this button
