@@ -1,4 +1,5 @@
 import streamlit as st
+import redis
 import os
 from langchain.llms import OpenAI
 from langchain.llms import OpenAI
@@ -49,6 +50,10 @@ from oauth2client.service_account import ServiceAccountCredentials
 # Fetch existing data from Google Sheets
 
 openai.api_key = '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'
+
+
+
+
 # Google Sheets connection setup
 def init_gspread_connection():
     scope = ["https://spreadsheets.google.com/feeds",
@@ -883,6 +888,10 @@ def main():
         st.plotly_chart(fig)
 
     with tab2:        
+        r = redis.Redis(host='redis-18655.c53.west-us.azure.cloud.redislabs.com',
+                        port=18655,
+                        password='suNPb7j7UafWJrPCymWwolAhO9auOmux')
+        
         if st.button("Analyze Openness", key="start_openness"):                # Initialize the language model and prepare for evaluation
                 llm, negative_criteria_details, evaluation_prompt_template = get_llm_response_openness(candidate_data['OPENNESS'])
 
@@ -909,17 +918,17 @@ def main():
                         st.write(result)
                 
                 if st.button("Save Scores"):
-                    # Assuming `processed_scores` is the result of your analysis
-                    # Convert the processed_scores dictionary to a list to append to Google Sheets
+                    # Convert the processed_scores dictionary to a list and prepend the selected_candidate as the key
                     scores_list = [selected_candidate] + list(processed_scores.values())
                     
-                    # Specify the name of the worksheet where you want to save the scores
-                    scores_worksheet_name = "Sheet1"  # Change this to your actual worksheet name for scores
+                    # Convert scores_list to a string to store in Redis
+                    scores_str = ','.join(map(str, scores_list))
                     
-                    # Append the scores to the Google Sheet
-                    worksheet = client.open_by_key(spreadsheet_id).worksheet(scores_worksheet_name)
-                    worksheet.append_row(scores_list)
-                    st.success("Scores successfully saved to Google Sheet.")
+                    # Use the selected_candidate as the key and scores_str as the value
+                    r.set(selected_candidate, scores_str)
+                    
+                    st.success("Scores successfully saved to Redis.")
+
     with tab3:
         if st.button("Analyze Conscientiousness", key="start_conscientiousness"):  # Unique key for this button
             # Initialize the language model and prepare for evaluation
