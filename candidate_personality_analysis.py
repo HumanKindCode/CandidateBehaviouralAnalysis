@@ -49,7 +49,7 @@ import string
 from oauth2client.service_account import ServiceAccountCredentials
 # Fetch existing data from Google Sheets
 
-openai.api_key = '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'
+openai.api_key = os.getenv('OPENAI_SECRET_KEY')
 
 
 
