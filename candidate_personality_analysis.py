@@ -49,7 +49,7 @@ import string
 from oauth2client.service_account import ServiceAccountCredentials
 # Fetch existing data from Google Sheets
 
-openai.api_key = os.getenv('OPENAI_SECRET_KEY')
+openai.api_key = "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"
 
 
 
@@ -110,7 +110,7 @@ def get_llm_response_openness(openness_text):
     # llm = ChatOpenAI(openai_api_key="your-openai-api-key")
 
     # Initialize the language model
-    llm = ChatOpenAI(openai_api_key="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")
+    llm = ChatOpenAI(openai_api_key="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")
 
     # Define the criteria and their detailed evaluation instructions
     negative_criteria_details = {
@@ -258,7 +258,7 @@ def get_llm_response_conscientiousness(conscientiousness_text):
     # llm = ChatOpenAI(openai_api_key="your-openai-api-key")
 
     # Initialize the language model
-    llm = ChatOpenAI(openai_api_key="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")
+    llm = ChatOpenAI(openai_api_key="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")
 
     # Define the criteria and their detailed evaluation instructions
 
@@ -375,7 +375,7 @@ def get_llm_response_extraversion(extraversion_text):
     # llm = ChatOpenAI(openai_api_key="your-openai-api-key")
 
     # Initialize the language model
-    llm = ChatOpenAI(openai_api_key="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")
+    llm = ChatOpenAI(openai_api_key="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")
 
     negative_criteria_details = {
         "Understanding of Effective Leadership": """10 - Exceptional Understanding: Demonstrates an outstanding grasp of effective leadership, particularly in areas influenced by extraversion. Exhibits a natural ability to energize, inspire, and lead teams with charisma. Their leadership style is adaptive, inclusive, and highly motivating.
@@ -469,7 +469,7 @@ def get_llm_response_agreeableness(agreeableness_text):
     # llm = ChatOpenAI(openai_api_key="your-openai-api-key")
 
     # Initialize the language model
-    llm = ChatOpenAI(openai_api_key="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")
+    llm = ChatOpenAI(openai_api_key="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")
 
     # Define the criteria and their detailed evaluation instructions
     criteria_details = {
@@ -545,7 +545,7 @@ def get_llm_response_neuroticism(neuroticism_text):
     # llm = ChatOpenAI(openai_api_key="your-openai-api-key")
 
     # Initialize the language model
-    llm = ChatOpenAI(openai_api_key="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")
+    llm = ChatOpenAI(openai_api_key="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")
 
     # Define the criteria and their detailed evaluation instructions
     criteria_details = {
