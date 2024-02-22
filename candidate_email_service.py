@@ -1,4 +1,4 @@
-# @author: Ramasubramanya Mysore Sheshadri | s4012231@student.rmit.edu.au
+# @author: Ramasubramanya Mysore Sheshadri | MS student at RMIT University
 
 import streamlit as st
 import smtplib
