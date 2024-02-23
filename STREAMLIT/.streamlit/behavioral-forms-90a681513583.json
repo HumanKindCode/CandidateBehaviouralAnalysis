@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "behavioral-forms",
+  "private_key_id": "90a681513583b261d390d0ad614e7c606d9f6c76",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQCExrzcCwNXAX66\niEKcY0edcx1x8FgD7g9nSuNhyDBz/dm3LPmLxdHEobHaqxDxBVJbpwvS5FolrkPO\nc+sFMCNq/nm0WA7kZW2uPh9vpeKbUmKSGJQpUpNjiI6c/c5QBU63L0lb41SpaSq3\ndW6mok2rpIyWee+2fKaM4MqMw/QfeKl6AOYYj++EH0qgsvABg60wp1X+BMrDe+Ce\nYx9pPryoabeCpl1zPL5jZWXSADSF7AIfrTz81A6zBRSLTAX76gah4KNsPmo5h1Wr\nC3jz7yi1tVCaBygidGG1pX7fpEpSw5bn6bY3SffSXGmbmOA6bIcS1aC6S0MpKw66\noNCLosfVAgMBAAECggEAHEPwjYlcpyd+0nfScldiNf79DDXljsSdi9gx6q2CvxaR\nxABziVFN9CWV5p6XJzACVdeMWVNaa34bGjasF/kk+RB+WSmL1gxPmpHIAG0Yfgc+\nS6qm09sr3DsEXSBczMUseiu7Wq/c5ImqWc7KhPe1QC5x7VC8+qSzkfcCt4+5hv9K\n2H08sGkzEF8GfKwlDVw8HIX4riOemtz50OUanT3H3Gjl/iCUzi/OBbbvGdBaT8ZM\nCQ6O3oFTwvR5zkyuIUEpDkAO6EiAJEKEciWt/hLrrxWakXHhy3PbKdjuUFj0YUmI\ntFInlPzNFO5SBnNhTs5XSUFF/KfCwkKphA+wEw23wQKBgQC6ZtdTzZABZm/oVDzf\nNb7/xFUMTC8m9kqFhqGIJJ2Vu2PNBBqO3nSFBp7OXV1XU/sKLor1VF58AMSw3Gpj\nBuv9KUrSiT69bgdiQ8sBOamm5g2CyPNPP1m2VXcfwso+MddzPBQrOPByBKYHSNv5\nCc8NBdnR5EwLRX1tQtJJqIBYoQKBgQC2WiBwfaoE7pcL16gLgIpFrkRpfe/wZqMe\nOwi/zfLCNAMAEDzxZzgFvIE3ZH+0Wz5XfUQB2zEBjF11g3n240eqvphFmaiJHn/3\nImcsRU48ke6xkS1UePp0hEzKq8wBiWCVg0jqc/00xy6QQXIIhJjZ3nCIT9AzKf6A\nCBCnvLletQKBgD9CIXdGPsXK3tWIqPPTSJOCLJ60yBe/48B21SDf1D75TkBIUT8F\nDaQLgB9mngPB82McMnpZfIs2s4mV8+DRe4r51XOnsgwVaBoYCa/LwuBqGFG3IqNV\nS3vOe1PjBkGfJo/r5qhYdXksTLASMNzOUF8KCkbp5Ei693r5/2WR8qShAoGASD40\nk9x1Ozb7CGoL3WKzZR/BYrnOEUPYY+WndbW181J/zcqhGlJ2U293Eeby4RU1AZxT\nERkxtRdS/3dzHmi0v+R6lzhlGM3IjLRIg7WBZWW7VwXZG5pCP18avUCKtiEi7pjw\njlIdgodW3zfOYamGlOoXUymrplmAxmBrmMif9/ECgYBkwdEgtVd5mn79dyuY6Ycy\nfdOjJZLf7+/ESsokKI+Y7EHdlVuV63ijzwGd7SuwWYIR7aakgo8TwstdGVUmYhBz\n04zuEe9mJvRw5z0oYKHBEQFNXvw9zGXzq0qMyzsFGzHgnyDWKW6xvqNpQ4FsAuUB\n+tFof5oHf4Fq93ThDHkMhg==\n-----END PRIVATE KEY-----\n",
+  "client_email": "gsheets-python-access@behavioral-forms.iam.gserviceaccount.com",
+  "client_id": "111187646606346153235",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/gsheets-python-access%40behavioral-forms.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}
