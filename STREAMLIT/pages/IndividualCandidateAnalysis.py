@@ -22,7 +22,10 @@ from spacy import displacy
 from langchain.chat_models import ChatOpenAI
 from langchain.prompts.chat import ChatPromptTemplate
 from langchain.chains import SequentialChain, LLMChain
-# nlp = spacy.load("en_core_web_sm")
+import psycopg2
+from psycopg2 import sql
+
+import json
 import re
 from langchain.chat_models import ChatOpenAI
 from langchain.prompts.chat import ChatPromptTemplate
@@ -48,11 +51,29 @@ import random
 import string
 from oauth2client.service_account import ServiceAccountCredentials
 # Fetch existing data from Google Sheets
+import json
+import psycopg2
+PGEND_POINT = "database-1.clm0wcc6k54c.ap-southeast-2.rds.amazonaws.com"
+PGDATABASE_NAME = "CandidPersonaAnalysis"
+PGUSER_NAME = 'mike'
+PGPASSWORD = 'HumanKind25'
+conn = psycopg2.connect(
+    dbname=PGDATABASE_NAME, 
+    user=PGUSER_NAME, 
+    password=PGPASSWORD, 
+    host=PGEND_POINT
+)
+cur = conn.cursor()
+openai.api_key = ''
+llm = ChatOpenAI(openai_api_key="")
 
-openai.api_key = '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'
-llm = ChatOpenAI(openai_api_key="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")
+# Initialize session state variables if they don't exist
+if 'recheck_candidate' not in st.session_state:
+    st.session_state.recheck_candidate = False
 
-
+# Define a function to reset the recheck flag
+def reset_recheck_flag():
+    st.session_state.recheck_candidate = True
 
 # Google Sheets connection setup
 def init_gspread_connection():
@@ -71,16 +92,25 @@ def get_sheet_data(client, spreadsheet_id, worksheet_name):
 
 client = init_gspread_connection()
 
-def format_candidate_data(row):
-    # Return a dictionary of candidate details instead of a formatted string
-    return {
-        "Candidate Name": row['CandidateName'],
-        "Openness": row['OPENNESS'],
-        "Conscientiousness": row['CONSCIENTIOUSNESS'],
-        "Extraversion": row['EXTRAVERSION'],
-        "Agreeableness": row['AGREEABLENESS'],
-        "Neuroticism": row['NEUROTICISM']
-    }
+def connect():
+    conn_string = f"host={PGEND_POINT} port=5432 dbname={PGDATABASE_NAME} user={PGUSER_NAME} password={PGPASSWORD}"
+    conn = psycopg2.connect(conn_string)
+    print("Connected!")
+    return conn
+
+
+
+
+# def format_candidate_data(row):
+#     # Return a dictionary of candidate details instead of a formatted string
+#     return {
+#         "Candidate Name": row['CandidateName'],
+#         "Openness": row['OPENNESS'],
+#         "Conscientiousness": row['CONSCIENTIOUSNESS'],
+#         "Extraversion": row['EXTRAVERSION'],
+#         "Agreeableness": row['AGREEABLENESS'],
+#         "Neuroticism": row['NEUROTICISM']
+#     }
 
 def calculate_average(questions, data):
     total_score = 0
@@ -703,25 +733,7 @@ def plot_pyplot_radar_chart(scores):
 
     return fig
 
-def save_processed_scores_to_sheet(client, spreadsheet_id, worksheet_name, candidate_name, processed_scores):
-    # Open the spreadsheet and the worksheet
-    sheet = client.open_by_key(spreadsheet_id).worksheet(worksheet_name)
-    
-    # Convert processed_scores to a format suitable for Google Sheets
-    scores_list = [processed_scores[key] for key in sorted(processed_scores)]
-    
-    # Find the row of the candidate to update
-    # Assuming the first column of the worksheet contains the candidate names
-    candidate_list = sheet.col_values(1)
-    if candidate_name in candidate_list:
-        row_number = candidate_list.index(candidate_name) + 1  # +1 because list indexes start at 0 but Google Sheets rows start at 1
-        # Update the row with new scores. Adjust the range according to your sheet's structure
-        cell_range = f'B{row_number}:K{row_number}'  # Assuming scores start from column B to K for each candidate
-        sheet.update(cell_range, [scores_list])
-    else:
-        # If the candidate is not found, append a new row with the candidate name and scores
-        new_row = [candidate_name] + scores_list
-        sheet.append_row(new_row)
+
 
 def extract_score(result_text):
     # Define a regex pattern that matches your score format
@@ -735,123 +747,12 @@ def extract_score(result_text):
         return ""  # Return a placeholder if the score is not found
     
 
-def save_scores_to_google_sheets(client, spreadsheet_id, worksheet_name, candidate_name, column_name, openness_llm_answer):
-    # Convert the dictionary to a JSON string
-    openness_llm_answer_json = json.dumps(openness_llm_answer, ensure_ascii=False)
-    
-    # Continue with your existing code to save to Google Sheets...
-    sheet = client.open_by_key(spreadsheet_id).worksheet(worksheet_name)
-    cell = sheet.find(candidate_name)
-    if not cell:
-        print(f"Candidate {candidate_name} not found.")
-        return False
-    
-    headers = sheet.row_values(1)
-    try:
-        openness_column_index = headers.index(column_name) + 1
-    except ValueError:
-        print("'Openness-LLM-Answer' column not found.")
-        return False
-    
-    # Update the cell with the serialized JSON string
-    sheet.update_cell(cell.row, openness_column_index, openness_llm_answer_json)
-    print(f"Successfully updated Openness score for {candidate_name}.")
-    return True
-
-def plot_pyplot_radar_chart2(scores):
-    # Filter out the 'answer' key and any entries without a score
-    filtered_scores = {k: v for k, v in scores.items() if k != 'answer' and v['score']}
-    
-    labels = list(filtered_scores.keys())
-    # Convert scores to floats, defaulting to 0.0 for any empty scores
-    values = [float(v['score']) if v['score'] else 0.0 for v in filtered_scores.values()]
-
-    fig = make_subplots(rows=1, cols=1, specs=[[{'type': 'polar'}]])
-    fig.add_trace(go.Scatterpolar(
-        r=values,
-        theta=labels,
-        fill='toself'
-    ))
-
-    fig.update_layout(
-        polar=dict(
-            radialaxis=dict(
-                visible=True,
-                range=[0, 10]
-            )
-        ),
-        showlegend=False
-    )
-
-    return fig
-
-def fetch_and_parse_data(candidate_name):
-    client = init_gspread_connection()
-    spreadsheet_id = "1Ou0ZXVcLPkhdARBPnhfrp8cGq-zG2hPMnezQI8SZp2I"
-    worksheet_name = "Sheet1"
-
-    existing_data = get_sheet_data(client, spreadsheet_id, worksheet_name)
-    # Ensure candidate_row is a single row by using .iloc[0]
-    candidate_row = existing_data[existing_data['CandidateName'] == candidate_name].iloc[0]
-
-    llm_data = {}
-    columns = ['Openness-LLM-Answer', 'Conscientiousness-LLM-Answer', 'Extraversion-LLM-Answer', 'Agreebleness-LLM-Answer', 'Neuroticism-LLM-Answer']
-    for column in columns:
-        # Directly access the cell's value; it's now guaranteed to be a single value, not a Series
-        json_data = candidate_row[column]
-        # No need for the pd.isnull check here since we're dealing with a single value
-        parsed_data = json.loads(json_data) if pd.notnull(json_data) else {}
-        llm_data[column.replace('-LLM-Answer', '')] = parsed_data
-    # st.write(llm_data)
-    return llm_data
-
-
-def prepare_data_for_plotting(llm_data):
-    # Initialize containers for traits and their scores
-    traits = []
-    scores = []
-    
-    # Iterate through each trait's data
-    for trait, trait_data in llm_data.items():
-        # Iterate through each detail for the trait
-        for criterion, detail in trait_data.items():
-            if criterion != "answer":  # Skip the 'answer' entry if not needed for plotting
-                score_str = detail.get("score", "0")  # Default to "0" if no score
-                try:
-                    score = float(score_str) if score_str else 0.0  # Convert to float, handling empty strings
-                except ValueError:
-                    score = 0.0  # Default to 0.0 for non-numeric strings
-                traits.append(f"{trait}-{criterion}")  # Combine trait and criterion for label
-                scores.append(score)
-    
-    return traits, scores
 
 
 
-def plot_llm_scores(df):
-    # Ensure the DataFrame has the columns we expect
-    if not all(column in df.columns for column in ['Candidate', 'Trait and Criterion', 'Score']):
-        raise ValueError("DataFrame must contain 'Candidate', 'Trait and Criterion', and 'Score' columns")
 
-    # Split 'Trait and Criterion' into separate 'Traits' and 'Criteria' columns for coloring
-    df['Traits'] = df['Trait and Criterion'].apply(lambda x: x.split('-')[0])
-    df['Criteria'] = df['Trait and Criterion'].apply(lambda x: '-'.join(x.split('-')[1:]))
 
-    # Use Plotly Express to create the stacked bar chart
-    fig = px.bar(df, x='Traits', y='Score', color='Criteria', facet_col='Candidate',
-                 title="LLM Analysis Scores for Each Criterion",
-                 labels={'Score': 'Score', 'Traits': 'Trait', 'Criteria': 'Criterion', 'Candidate': 'Candidate'},
-                 hover_data=['Trait and Criterion', 'Score'],  # Show detailed info on hover
-                 barmode='stack')
 
-    # Update layout if necessary to better fit the facet columns
-    fig.update_layout(
-        autosize=True,
-        margin=dict(l=20, r=20, t=30, b=20),
-        paper_bgcolor="LightSteelBlue",
-    )
-
-    return fig
 
 answer_mappings  = {
         "QUESTION1_TYPES": {
@@ -921,55 +822,247 @@ answer_mappings  = {
         }
     }
 trait_questions = {
-        "Openness": ['ANSWER1', 'ANSWER10', 'ANSWER3'],
-        "Conscientiousness": ['ANSWER6', 'ANSWER7', 'ANSWER3'],
-        "Extraversion": ['ANSWER2', 'ANSWER8'],
-        "Agreeableness": ['ANSWER4', 'ANSWER9'],
-        "Neuroticism": ['ANSWER5'],
+        "Openness": ['Answer 1', 'Answer 10', 'Answer 3'],
+        "Conscientiousness": ['Answer 6', 'Answer 7', 'Answer 3'],
+        "Extraversion": ['Answer 2', 'Answer 8'],
+        "Agreeableness": ['Answer 4', 'Answer 9'],
+        "Neuroticism": ['Answer 5'],
     }
 
+def init_postgres_connection():
+    return psycopg2.connect(
+        dbname="CandidPersonaAnalysis",
+        user="mike",
+        password="HumanKind25",
+        host="database-1.clm0wcc6k54c.ap-southeast-2.rds.amazonaws.com"
+    )
+
+def save_scores_to_postgres(uniqueid, candidate_name, criteria, scores_dict):
+    # Assuming `cur` and `conn` are already defined and connected to your database
+    # Check if a row exists for the given uniqueid
+    cur = conn.cursor()
+    cur.execute("SELECT EXISTS(SELECT 1 FROM llm_candidates_responses WHERE uniqueid=%s)", (uniqueid,))
+    exists = cur.fetchone()[0]
+    scores_json = json.dumps(scores_dict)
+    
+    if exists:
+        # If the row exists, update the specific column based on the criteria
+        query = """
+        UPDATE llm_candidates_responses 
+        SET {}=%s, candidatename=%s
+        WHERE uniqueid=%s
+        """
+        criteria_column = {
+            "Openness-LLM-Answer": "openness_llm_answer",
+            "Conscientiousness-LLM-Answer": "conscientiousness_llm_answer",
+            "Extraversion-LLM-Answer": "extraversion_llm_answer",
+            "Agreebleness-LLM-Answer": "agreebleness_llm_answer",
+            "Neuroticism-LLM-Answer": "neuroticism_llm_answer"
+        }.get(criteria, "")
+        
+        if criteria_column:
+            cur.execute(sql.SQL(query).format(sql.Identifier(criteria_column)), (scores_json, candidate_name, uniqueid))
+    else:
+        # If the row does not exist, insert a new row with the given uniqueid and criteria
+        cur.execute("""
+        INSERT INTO llm_candidates_responses (uniqueid, candidatename, openness_llm_answer, conscientiousness_llm_answer, extraversion_llm_answer, agreebleness_llm_answer, neuroticism_llm_answer) 
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        """, (uniqueid, candidate_name, 
+              scores_json if criteria == "Openness-LLM-Answer" else None, 
+              scores_json if criteria == "Conscientiousness-LLM-Answer" else None, 
+              scores_json if criteria == "Extraversion-LLM-Answer" else None, 
+              scores_json if criteria == "Agreebleness-LLM-Answer" else None, 
+              scores_json if criteria == "Neuroticism-LLM-Answer" else None))
+
+    conn.commit()  # Commit the transaction
+    cur.close()
+    return True
+
+def get_database_connection():
+    try:
+        connection = psycopg2.connect(
+            host="database-1.clm0wcc6k54c.ap-southeast-2.rds.amazonaws.com",
+            database="CandidPersonaAnalysis",
+            user="mike",
+            password="HumanKind25"
+        )
+        return connection
+    except Exception as error:
+        print(f"Error: {error}")
+        return None
+
+def fetch_candidate_id():
+    connection = get_database_connection()
+    if connection is not None:
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT DISTINCT uniqueid FROM candidates;")
+                candidate_names = [row[0] for row in cursor.fetchall()]
+            return candidate_names
+        except Exception as error:
+            print(f"Error: {error}")
+            return []
+        finally:
+            connection.close()
+    else:
+        return []
+
+def fetch_candidate_names():
+    connection = get_database_connection()
+    if connection is not None:
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT DISTINCT candidate_name FROM candidates;")
+                candidate_names = [row[0] for row in cursor.fetchall()]
+            return candidate_names
+        except Exception as error:
+            print(f"Error: {error}")
+            return []
+        finally:
+            connection.close()
+    else:
+        return []
+
+def fetch_candidate_details(candidate_id):
+    connection = get_database_connection()
+    if connection is not None:
+        try:
+            with connection.cursor() as cursor:
+                query = """
+                SELECT uniqueid, candidate_name, answer1, answer2, answer3, answer4, answer5, answer6, answer7, answer8, answer9, answer10, 
+                       openness, conscientiousness, extraversion, agreeableness, neuroticism
+                FROM candidates
+                WHERE uniqueid = %s;
+                """
+                cursor.execute(query, (candidate_id,))
+                result = cursor.fetchone()
+                
+                if result:
+                    columns = ['id', 'candidate_name', 'answer1', 'answer2', 'answer3', 'answer4', 'answer5', 'answer6', 'answer7', 'answer8', 'answer9', 'answer10', 
+                               'openness', 'conscientiousness', 'extraversion', 'agreeableness', 'neuroticism']
+                    candidate_data = {col: val for col, val in zip(columns, result)}
+                    return candidate_data
+                else:
+                    return None
+        except Exception as error:
+            print(f"Error fetching candidate details: {error}")
+            return None
+        finally:
+            connection.close()
+    else:
+        return None
+
+
+def format_candidate_data(candidate_data):
+    if candidate_data is None:
+        return {}
+
+    # Define a mapping of database field names to user-friendly labels
+    field_labels = {
+        'id': 'candidate_unique_id',
+        'candidate_name': 'Candidate Name',
+        'answer1': 'Answer 1',
+        'answer2': 'Answer 2',
+        'answer3': 'Answer 3',
+        'answer4': 'Answer 4',
+        'answer5': 'Answer 5',
+        'answer6': 'Answer 6',
+        'answer7': 'Answer 7',
+        'answer8': 'Answer 8',
+        'answer9': 'Answer 9',
+        'answer10': 'Answer 10',
+        'openness': 'Openness',
+        'conscientiousness': 'Conscientiousness',
+        'extraversion': 'Extraversion',
+        'agreeableness': 'Agreeableness',
+        'neuroticism': 'Neuroticism'
+    }
+
+    # Format the data using the mapping
+    formatted_data = {}
+    for key, label in field_labels.items():
+        value = candidate_data.get(key, 'N/A')  # Use 'N/A' if the key doesn't exist in candidate_data
+        # Here you could add additional formatting, e.g., converting scores to strings with explanations, etc.
+        formatted_data[label] = value
+
+    return formatted_data
+
+processed_scores = {}
+processed_scores_conscientiousness = {}
+processed_scores_extraversion = {}
+processed_scores_agreebleness = {}
+processed_scores_neuroticism = {}
+
+display_criterion_openness = []
+openness_results_dict = {}
+conscientiousness_results_dict = {}
+extraversion_results_dict = {}
+agreebleness_results_dict = {}
+neuroticism_results_dict = {}
+
+def fetch_candidate_id_name():
+    connection = get_database_connection()
+    if connection is not None:
+        try:
+            with connection.cursor() as cursor:
+                # Fetch both uniqueid and candidate_name in a single query
+                cursor.execute("SELECT uniqueid, candidate_name FROM candidates;")
+                rows = cursor.fetchall()
+                
+                # Prepare the data
+                candidate_details_combined = [f"{name} ({id_})" for id_, name in rows]
+                candidate_ids = [id_ for id_, name in rows]
+                candidate_names = [name for id_, name in rows]
+
+                # Return a dictionary with all formats
+                return {
+                    "combined": candidate_details_combined,
+                    "ids": candidate_ids,
+                    "names": candidate_names
+                }
+        except Exception as error:
+            print(f"Error: {error}")
+            return {"combined": [], "ids": [], "names": []}
+        finally:
+            connection.close()
+    else:
+        return {"combined": [], "ids": [], "names": []}
+
+def extract_data_within_parentheses(input_string):
+    # Pattern to find content within parentheses
+    pattern = r"\((.*?)\)"
+    match = re.search(pattern, input_string)
+    if match:
+        return match.group(1)  # Return the content within the parentheses
+    else:
+        return None  # No match found
 
 def main():
-    # Streamlit app layout setup
     st.header("Individual Candidate Analysis")
+
+    # Initialize necessary variables
     processed_scores = {}
-    processed_scores_conscientiousness = {}
-    processed_scores_extraversion = {}
-    processed_scores_agreebleness = {}
-    processed_scores_neuroticism = {}
     
-    display_criterion_openness = []
-    openness_results_dict = {}
-    conscientiousness_results_dict = {}
-    extraversion_results_dict = {}
-    agreebleness_results_dict = {}
-    neuroticism_results_dict = {}
-    
-    # Load candidate names from the Google Sheets data
-    client = init_gspread_connection()
-    spreadsheet_id = "1Ou0ZXVcLPkhdARBPnhfrp8cGq-zG2hPMnezQI8SZp2I"
-    worksheet_name = "Sheet1"
-    existing_data = get_sheet_data(client, spreadsheet_id, worksheet_name)
-    candidate_names = existing_data['CandidateName'].unique()
-    selected_candidate = st.selectbox("Select a Candidate:", candidate_names)
-    
-    
-    # Dropdown for candidate selection
-    
+
+    result = fetch_candidate_id_name()
+    combined_candidate_details = result["combined"]  # This will be the list of "name (id)"
+    candidate_ids = result["ids"]  # This will be the list of ids
+    candidate_names = result["names"]
+    selected_candidate = st.selectbox("Select a Candidate:", combined_candidate_details)
+    extracted_selected_candidate_id = extract_data_within_parentheses(selected_candidate)
+    print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++",type(extracted_selected_candidate_id))
 
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["Candidate Answers", "Openness", "Conscientiousness", "Extraversion", "Agreebleness", "Neuroticism"])
     
-    client = init_gspread_connection()
-    spreadsheet_id = "1Ou0ZXVcLPkhdARBPnhfrp8cGq-zG2hPMnezQI8SZp2I"
-    worksheet_name = "Sheet1"
-    candidate_name = selected_candidate 
+    # Assuming you have defined a function to fetch candidate details from PostgreSQL
+    candidate_data = fetch_candidate_details(extracted_selected_candidate_id)  # You'll need to implement this
     
+    # print("=============================================+",type(candidate_data))
     with tab1:
         
         if selected_candidate:
-            # Fetch and display candidate details
-            candidate_data = existing_data[existing_data['CandidateName'] == selected_candidate].iloc[0]
             formatted_data = format_candidate_data(candidate_data)
+
 
             st.write("#### Candidate Answers")
                     
@@ -977,6 +1070,7 @@ def main():
             for detail, value in formatted_data.items():
                 if detail != "Candidate Name":
                     with st.expander(detail):
+                        # st.markdown("""""")
                         st.write(value)
         
         
@@ -984,12 +1078,15 @@ def main():
 
         # Calculate scores for each trait
         for trait, questions in trait_questions.items():
+            # st.write(trait, questions)
             total_score = 0
             for question in questions:
+                # st.write(question)
                 # Extract the question number from the question column name to find the correct mapping
-                question_num = question.replace('ANSWER', '')
+                question_num = question.replace('Answer ', '')
                 question_type = f"QUESTION{question_num}_TYPES"
                 # question_type = f"QUESTION{question[-1]}_TYPES"
+                question = question.replace('Answer ', 'answer')
                 answer_text = candidate_data[question]
                 # Use the mapping to get the numeric score
                 score = answer_mappings[question_type].get(answer_text, 0)  # Default to 0 if not found
@@ -1022,392 +1119,231 @@ def main():
 
     with tab2:
 
-        existing_data = get_sheet_data(client, spreadsheet_id, worksheet_name)
-        candidate_row = existing_data[existing_data['CandidateName'] == candidate_name]
+        if selected_candidate:
+            formatted_data = format_candidate_data(candidate_data)
+            st.write(candidate_data)
+            st.write(formatted_data)
+        # existing_data = get_sheet_data(client, spreadsheet_id, worksheet_name)
+        # candidate_row = existing_data[existing_data['CandidateName'] == candidate_name]
 
-        if not candidate_row.empty:
-            column_name = "Openness-LLM-Answer"
-            openness_data = candidate_row.iloc[0][column_name]  # Adjust based on actual column name
-            
-            
-            st.warning('🔍 Searching Candidate Data...')
-              # Simulate the delay of searching
 
-            # Conditionally show the result messages
-            
-            if openness_data:  # Assuming 'openness_data' is defined and indicates if data was found
-                #  
-                st.success('✅ Data found for the selected candidate.')
-                st.balloons()
-                try:
-                    processed_scores = json.loads(openness_data)
+            if st.button("Analyze Openness", key="start_openness"):
+                # Initialize the language model and prepare for evaluation
+                llm, negative_criteria_details, evaluation_prompt_template = get_llm_response_openness(formatted_data['Openness'])
 
-                    # Plot the radar chart
-                    fig = plot_pyplot_radar_chart2(processed_scores)
-                    st.plotly_chart(fig)
-                    
-                    for criterion, details in processed_scores.items():
-                        score = details.get('score', 'No score provided')
-                        result_text = details.get('result_text', 'No details provided')
+                # Assuming OPENNESS text is directly used or you have a specific field from candidate_data
+                openness_text = formatted_data['Openness']
+                # st.write(openness_text)
+                # Create and run sequential chain for the selected candidate
+                seq_chain = create_and_run_seq_chain("openness",openness_text, llm, negative_criteria_details, evaluation_prompt_template)
+
+                openness_results = seq_chain({'answer': openness_text})
+                
+                for criterion in negative_criteria_details:
+                    evaluation_text = openness_results[f'score_{criterion}']
+                    score = extract_score_from_text(evaluation_text)  # Utilize the previously defined function
+                    if score is not None:
+                        processed_scores[criterion] = score
                         
-                        # Use the criterion as the label for the expander. Show the score in the expander's label as well.
-                        with st.expander(f"{criterion} - Score: {score}"):
-                            # Inside the expander, display the detailed feedback text.
-                            st.write(result_text)
+                fig = plot_pyplot_radar_chart(processed_scores)
+                st.plotly_chart(fig)
+                for criterion, result in openness_results.items():
+                    score = extract_score(result)
+                    display_criterion_openness = criterion.replace("score_", "")
+                    with st.expander(f"{display_criterion_openness} - Score: {score}"):
+                        st.write(result)
                     
-                except json.JSONDecodeError:
-                    st.error("Error parsing the candidate's data. Please check the format.")
-            else:
-                #  
-                st.error('⚠️ You need to analyse the candidate data.')
-                if st.button("Analyze Openness", key="start_openness"):
-                    # Initialize the language model and prepare for evaluation
-                    llm, negative_criteria_details, evaluation_prompt_template = get_llm_response_openness(candidate_data['OPENNESS'])
+                    openness_results_dict[display_criterion_openness] = {
+                        "score": score,
+                        "result_text": result
+                    }
+                
+                st.write(formatted_data)
+                success = save_scores_to_postgres(formatted_data['candidate_unique_id'], formatted_data['Candidate Name'], "Openness-LLM-Answer", openness_results_dict)
 
-                    # Assuming OPENNESS text is directly used or you have a specific field from candidate_data
-                    openness_text = candidate_data['OPENNESS']
-
-                    # Create and run sequential chain for the selected candidate
-                    seq_chain = create_and_run_seq_chain("openness",openness_text, llm, negative_criteria_details, evaluation_prompt_template)
-
-                    openness_results = seq_chain({'answer': openness_text})
-                    
-                    for criterion in negative_criteria_details:
-                        evaluation_text = openness_results[f'score_{criterion}']
-                        score = extract_score_from_text(evaluation_text)  # Utilize the previously defined function
-                        if score is not None:
-                            processed_scores[criterion] = score
-                            
-                    fig = plot_pyplot_radar_chart(processed_scores)
-                    st.plotly_chart(fig)
-                    for criterion, result in openness_results.items():
-                        score = extract_score(result)
-                        display_criterion_openness = criterion.replace("score_", "")
-                        with st.expander(f"{display_criterion_openness} - Score: {score}"):
-                            st.write(result)
-                        
-                        openness_results_dict[display_criterion_openness] = {
-                            "score": score,
-                            "result_text": result
-                        }
-                    
-                    success = save_scores_to_google_sheets(client, spreadsheet_id, worksheet_name, candidate_name, "Openness-LLM-Answer", openness_results_dict)
-
-                    if success:
-                        st.toast('The Openness score was successfully updated in Google Sheets.', icon='😍')
-                    else:
-                        print("There was an issue updating the Openness score in Google Sheets.")
+            
+                if success:
+                    st.toast('The Openness score was successfully updated in Database.', icon='😍')
+                    print("Yahoooo!")
+                else:
+                    st.toast("There was an issue updating the Openness score in Database.")
 
 
 
 
     with tab3:
+        if selected_candidate:
+            formatted_data = format_candidate_data(candidate_data)
+            st.write(candidate_data)
+            st.write(formatted_data)
+        # existing_data = get_sheet_data(client, spreadsheet_id, worksheet_name)
+        # candidate_row = existing_data[existing_data['CandidateName'] == candidate_name]
 
-        existing_data = get_sheet_data(client, spreadsheet_id, worksheet_name)
-        candidate_row = existing_data[existing_data['CandidateName'] == candidate_name]
 
-        if not candidate_row.empty:
-            column_name = "Conscientiousness-LLM-Answer"
-            conscientiousness_data = candidate_row.iloc[0][column_name]  # Adjust based on actual column name
-            
-            
-            st.warning('🔍 Searching Candidate Data...')
-              # Simulate the delay of searching
+            if st.button("Analyze Conscientiousness", key="start_conscientiousness"):
+                # Initialize the language model and prepare for evaluation
+                llm, negative_criteria_details, evaluation_prompt_template = get_llm_response_conscientiousness(formatted_data['Conscientiousness'])
+                # Assuming OPENNESS text is directly used or you have a specific field from candidate_data
+                conscientiousness_text = formatted_data['Conscientiousness']
 
-        # Conditionally show the result messages
-        
-            if conscientiousness_data:  # Assuming 'openness_data' is defined and indicates if data was found
-                st.success('✅ Data found for the selected candidate.')
-                st.balloons()
-                try:
-                    processed_scores = json.loads(conscientiousness_data)
-                    
+                # Create and run sequential chain for the selected candidate
+                seq_chain = create_and_run_seq_chain("conscientiousness",conscientiousness_text, llm, negative_criteria_details, evaluation_prompt_template)
 
-                    #  
-                    # st.success("✅ Data found for the selected candidate.")
-                    # Plot the radar chart
-                    fig = plot_pyplot_radar_chart2(processed_scores)
-                    st.plotly_chart(fig)
-                    
-                    for criterion, details in processed_scores.items():
-                        score = details.get('score', 'No score provided')
-                        result_text = details.get('result_text', 'No details provided')
-                        
-                        # Use the criterion as the label for the expander. Show the score in the expander's label as well.
-                        with st.expander(f"{criterion} - Score: {score}"):
-                            # Inside the expander, display the detailed feedback text.
-                            st.write(result_text)
-                        
-
+                conscientiousness_results = seq_chain({'answer': conscientiousness_text})
                 
-                except json.JSONDecodeError:
-                    st.error("Error parsing the candidate's data. Please check the format.")
-            else:
-                st.error('⚠️ You need to analyse the candidate data.')
-                if st.button("Analyze Conscientiousness", key="start_conscientiousness"):  # Unique key for this button
-                    # Initialize the language model and prepare for evaluation
-                    llm, negative_criteria_details, evaluation_prompt_template = get_llm_response_conscientiousness(candidate_data['CONSCIENTIOUSNESS'])
+                for criterion in negative_criteria_details:
+                    evaluation_text_conscientiousness = conscientiousness_results[f'score_{criterion}']
+                    score_conscientiousness = extract_score_from_text(evaluation_text_conscientiousness)  # Utilize the previously defined function
+                    if score_conscientiousness is not None:
+                        processed_scores_conscientiousness[criterion] = score_conscientiousness
+                        
+                fig = plot_pyplot_radar_chart(processed_scores_conscientiousness)
+                st.plotly_chart(fig)
+                for criterion, result in conscientiousness_results.items():
+                    score = extract_score(result)
+                    display_criterion_conscientiousness = criterion.replace("score_", "")
+                    with st.expander(f"{display_criterion_conscientiousness} - Score: {score}"):
+                        st.write(result)
+                        
+                    conscientiousness_results_dict[display_criterion_conscientiousness] = {
+                            "score": score,
+                            "result_text": result
+                        }
+                
+                st.write(formatted_data)
+                success = save_scores_to_postgres(formatted_data['candidate_unique_id'], formatted_data['Candidate Name'], "Conscientiousness-LLM-Answer", conscientiousness_results_dict)
 
-                    # Assuming OPENNESS text is directly used or you have a specific field from candidate_data
-                    conscientiousness_text = candidate_data['CONSCIENTIOUSNESS']
-
-                    # Create and run sequential chain for the selected candidate
-                    seq_chain = create_and_run_seq_chain("conscientiousness",conscientiousness_text, llm, negative_criteria_details, evaluation_prompt_template)
-
-                    conscientiousness_results = seq_chain({'answer': conscientiousness_text})
+            
+                if success:
+                    st.toast('The Openness score was successfully updated in Database.', icon='😍')
+                    print("Yahoooo!")
+                else:
+                    st.toast("There was an issue updating the Openness score in Database.")
                     
-                    for criterion in negative_criteria_details:
-                        evaluation_text_conscientiousness = conscientiousness_results[f'score_{criterion}']
-                        score_conscientiousness = extract_score_from_text(evaluation_text_conscientiousness)  # Utilize the previously defined function
-                        if score_conscientiousness is not None:
-                            processed_scores_conscientiousness[criterion] = score_conscientiousness
-                            
-                    fig = plot_pyplot_radar_chart(processed_scores_conscientiousness)
-                    st.plotly_chart(fig)
-                    for criterion, result in conscientiousness_results.items():
-                        score = extract_score(result)
-                        display_criterion_conscientiousness = criterion.replace("score_", "")
-                        with st.expander(f"{display_criterion_conscientiousness} - Score: {score}"):
-                            st.write(result)
-                            
-                        conscientiousness_results_dict[display_criterion_conscientiousness] = {
-                                "score": score,
-                                "result_text": result
-                            }
- 
-                    success = save_scores_to_google_sheets(client, spreadsheet_id, worksheet_name, candidate_name, "Conscientiousness-LLM-Answer",conscientiousness_results_dict)
 
-                    if success:
-                        st.toast('The Conscientiousness score was successfully updated in Google Sheets.', icon='😍')
-                    else:
-                        print("There was an issue updating the Openness score in Google Sheets.")
         
     with tab4:
 
-        existing_data = get_sheet_data(client, spreadsheet_id, worksheet_name)
-        candidate_row = existing_data[existing_data['CandidateName'] == candidate_name]
-        # st.write(candidate_row)
-        if not candidate_row.empty:
-            column_name = "Extraversion-LLM-Answer"
-            extraversion_data = candidate_row.iloc[0][column_name]  # Adjust based on actual column name
+        if selected_candidate:
+            formatted_data = format_candidate_data(candidate_data)
+            st.write(candidate_data)
+            st.write(formatted_data)
+        # existing_data = get_sheet_data(client, spreadsheet_id, worksheet_name)
+        # candidate_row = existing_data[existing_data['CandidateName'] == candidate_name]
+
+
+            if st.button("Analyze Extraversion", key="start_extraversion"):
+                # Initialize the language model and prepare for evaluation
+                llm, negative_criteria_details, evaluation_prompt_template = get_llm_response_extraversion(formatted_data['Extraversion'])
+                # Assuming OPENNESS text is directly used or you have a specific field from candidate_data
+                extraversion_text = formatted_data['Extraversion']
+
+                # Create and run sequential chain for the selected candidate
+                seq_chain = create_and_run_seq_chain("extraversion",extraversion_text, llm, negative_criteria_details, evaluation_prompt_template)
+
+                extraversion_results = seq_chain({'answer': extraversion_text})
+                
+                for criterion in negative_criteria_details:
+                    evaluation_text_extraversion = extraversion_results[f'score_{criterion}']
+                    score_extraversion = extract_score_from_text(evaluation_text_extraversion)  # Utilize the previously defined function
+                    if score_extraversion is not None:
+                        processed_scores_extraversion[criterion] = score_extraversion
+                        
+                fig = plot_pyplot_radar_chart(processed_scores_extraversion)
+                st.plotly_chart(fig)
+                for criterion, result in extraversion_results.items():
+                    score = extract_score(result)
+                    display_criterion_extraversion = criterion.replace("score_", "")
+                    with st.expander(f"{display_criterion_extraversion} - Score: {score}"):
+                        st.write(result)
+                        
+                    extraversion_results_dict[display_criterion_extraversion] = {
+                            "score": score,
+                            "result_text": result
+                        }
+                    
+
+                
+                st.write(formatted_data)
+                success = save_scores_to_postgres(formatted_data['candidate_unique_id'], formatted_data['Candidate Name'], "Extraversion-LLM-Answer", extraversion_results_dict)
+
             
-            
-            st.warning('🔍 Searching Candidate Data...')
-               # Simulate the delay of searching
-
-            # Conditionally show the result messages
-            
-            if extraversion_data:  # Assuming 'openness_data' is defined and indicates if data was found
-                st.success('✅ Data found for the selected candidate.')
-                st.balloons()
-                try:
-                    processed_scores = json.loads(extraversion_data)
-                    
-
-                    #  
-                    # st.success("✅ Data found for the selected candidate.")
-                    # Plot the radar chart
-                    fig = plot_pyplot_radar_chart2(processed_scores)
-                    st.plotly_chart(fig)
-                    
-                    for criterion, details in processed_scores.items():
-                        score = details.get('score', 'No score provided')
-                        result_text = details.get('result_text', 'No details provided')
-                        
-                        # Use the criterion as the label for the expander. Show the score in the expander's label as well.
-                        with st.expander(f"{criterion} - Score: {score}"):
-                            # Inside the expander, display the detailed feedback text.
-                            st.write(result_text)
-                        
-
-                    
-                except json.JSONDecodeError:
-                    st.error("Error parsing the candidate's data. Please check the format.")
-                        
-            else:
-                st.error('⚠️ You need to analyse the candidate data.')
-                if st.button("Analyze Extraversion", key="start_extraversion"):                # Initialize the language model and prepare for evaluation
-                    llm, negative_criteria_details, evaluation_prompt_template = get_llm_response_extraversion(candidate_data['EXTRAVERSION'])
-
-                    # Assuming OPENNESS text is directly used or you have a specific field from candidate_data
-                    extraversion_text = candidate_data['EXTRAVERSION']
-
-                    # Create and run sequential chain for the selected candidate
-                    seq_chain = create_and_run_seq_chain("extraversion",extraversion_text, llm, negative_criteria_details, evaluation_prompt_template)
-
-                    extraversion_results = seq_chain({'answer': extraversion_text})
-                    
-                    for criterion in negative_criteria_details:
-                        evaluation_text_extraversion = extraversion_results[f'score_{criterion}']
-                        score_extraversion = extract_score_from_text(evaluation_text_extraversion)  # Utilize the previously defined function
-                        if score_extraversion is not None:
-                            processed_scores_extraversion[criterion] = score_extraversion
-                            
-                    fig = plot_pyplot_radar_chart(processed_scores_extraversion)
-                    st.plotly_chart(fig)
-                    for criterion, result in extraversion_results.items():
-                        score = extract_score(result)
-                        display_criterion_extraversion = criterion.replace("score_", "")
-                        with st.expander(f"{display_criterion_extraversion} - Score: {score}"):
-                            st.write(result)
-                            
-                        extraversion_results_dict[display_criterion_extraversion] = {
-                                "score": score,
-                                "result_text": result
-                            }
-                        
-
-                    success = save_scores_to_google_sheets(client, spreadsheet_id, worksheet_name, candidate_name, "Extraversion-LLM-Answer",extraversion_results_dict)
-
-                    if success:
-                        st.toast('The Extraversion score was successfully updated in Google Sheets.', icon='😍')
-                    else:
-                        print("There was an issue updating the Openness score in Google Sheets.")
+                if success:
+                    st.toast('The Openness score was successfully updated in Database.', icon='😍')
+                    print("Yahoooo!")
+                else:
+                    st.toast("There was an issue updating the Openness score in Database.")
 
     with tab5:
+        
+        if selected_candidate:
+            formatted_data = format_candidate_data(candidate_data)
+            st.write(candidate_data)
+            st.write(formatted_data)
+        # existing_data = get_sheet_data(client, spreadsheet_id, worksheet_name)
+        # candidate_row = existing_data[existing_data['CandidateName'] == candidate_name]
 
-        # Attempt to find existing data
-        existing_data = get_sheet_data(client, spreadsheet_id, worksheet_name)
-        candidate_row = existing_data[existing_data['CandidateName'] == candidate_name]
 
-        if not candidate_row.empty:
-            column_name = "Agreebleness-LLM-Answer"
-            agreebleness_data = candidate_row.iloc[0][column_name]  # Adjust based on actual column name
-            
-            
-            st.warning('🔍 Searching Candidate Data...')
-               # Simulate the delay of searching
+            if st.button("Analyze Agreeableness", key="start_agreeableness"):  # Unique key for this button
+                # Initialize the language model and prepare for evaluation
+                llm, negative_criteria_details, evaluation_prompt_template = get_llm_response_agreeableness(formatted_data['Agreeableness'])
 
-            # Conditionally show the result messages
-            
-            if agreebleness_data:  # Assuming 'openness_data' is defined and indicates if data was found
-                st.success('✅ Data found for the selected candidate.')
-                st.balloons()
-                try:
-                    processed_scores = json.loads(agreebleness_data)
-                    
+                # Assuming OPENNESS text is directly used or you have a specific field from candidate_data
+                agreeableness_text = formatted_data['Agreeableness']
 
-                    #  
-                    # st.success("✅ Data found for the selected candidate.")
-                    # Plot the radar chart
-                    fig = plot_pyplot_radar_chart2(processed_scores)
-                    st.plotly_chart(fig)
-                    
-                    for criterion, details in processed_scores.items():
-                        score = details.get('score', 'No score provided')
-                        result_text = details.get('result_text', 'No details provided')
+                # Create and run sequential chain for the selected candidate
+                seq_chain = create_and_run_seq_chain("agreebleness",agreeableness_text, llm, negative_criteria_details, evaluation_prompt_template)
+
+                agreebleness_results = seq_chain({'answer': agreeableness_text})
+                
+                for criterion in negative_criteria_details:
+                    evaluation_text_agreebleness = agreebleness_results[f'score_{criterion}']
+                    score_agreebleness = extract_score_from_text(evaluation_text_agreebleness)  # Utilize the previously defined function
+                    if score_agreebleness is not None:
+                        processed_scores_agreebleness[criterion] = score_agreebleness
                         
-                        # Use the criterion as the label for the expander. Show the score in the expander's label as well.
-                        with st.expander(f"{criterion} - Score: {score}"):
-                            # Inside the expander, display the detailed feedback text.
-                            st.write(result_text)
+                fig = plot_pyplot_radar_chart(processed_scores_agreebleness)
+                st.plotly_chart(fig)
+                for criterion, result in agreebleness_results.items():
+                    score = extract_score(result)
+                    display_criterion_agreebleness = criterion.replace("score_", "")
+                    with st.expander(f"{display_criterion_agreebleness} - Score: {score}"):
+                        st.write(result)
                         
+                    agreebleness_results_dict[display_criterion_agreebleness] = {
+                            "score": score,
+                            "result_text": result
+                        }
 
-                    
-                except json.JSONDecodeError:
-                    st.error("Error parsing the candidate's data. Please check the format.")
-            else:
-                st.error('⚠️ You need to analyse the candidate data.')
-                if st.button("Analyze Agreeableness", key="start_agreeableness"):  # Unique key for this button
-                    # Initialize the language model and prepare for evaluation
-                    llm, negative_criteria_details, evaluation_prompt_template = get_llm_response_agreeableness(candidate_data['AGREEABLENESS'])
+                
+                st.write(formatted_data)
+                success = save_scores_to_postgres(formatted_data['candidate_unique_id'], formatted_data['Candidate Name'], "Agreebleness-LLM-Answer", agreebleness_results_dict)
 
-                    # Assuming OPENNESS text is directly used or you have a specific field from candidate_data
-                    agreeableness_text = candidate_data['AGREEABLENESS']
+            
+                if success:
+                    st.toast('The Openness score was successfully updated in Database.', icon='😍')
+                    print("Yahoooo!")
+                else:
+                    st.toast("There was an issue updating the Openness score in Database.")
 
-                    # Create and run sequential chain for the selected candidate
-                    seq_chain = create_and_run_seq_chain("agreebleness",agreeableness_text, llm, negative_criteria_details, evaluation_prompt_template)
-
-                    agreebleness_results = seq_chain({'answer': agreeableness_text})
-                    
-                    for criterion in negative_criteria_details:
-                        evaluation_text_agreebleness = agreebleness_results[f'score_{criterion}']
-                        score_agreebleness = extract_score_from_text(evaluation_text_agreebleness)  # Utilize the previously defined function
-                        if score_agreebleness is not None:
-                            processed_scores_agreebleness[criterion] = score_agreebleness
-                            
-                    fig = plot_pyplot_radar_chart(processed_scores_agreebleness)
-                    st.plotly_chart(fig)
-                    for criterion, result in agreebleness_results.items():
-                        score = extract_score(result)
-                        display_criterion_agreebleness = criterion.replace("score_", "")
-                        with st.expander(f"{display_criterion_agreebleness} - Score: {score}"):
-                            st.write(result)
-                            
-                        agreebleness_results_dict[display_criterion_agreebleness] = {
-                                "score": score,
-                                "result_text": result
-                            }
-                        
-                    success = save_scores_to_google_sheets(client, spreadsheet_id, worksheet_name, candidate_name, "Agreebleness-LLM-Answer",agreebleness_results_dict)
-
-                    if success:
-                        st.toast('The Agreebleness score was successfully updated in Google Sheets.', icon='😍')
-                    else:
-                        print("There was an issue updating the Openness score in Google Sheets.")
-                        pass
 
 
                     
     with tab6:
+        if selected_candidate:
+            formatted_data = format_candidate_data(candidate_data)
+            st.write(candidate_data)
+            st.write(formatted_data)
+        # existing_data = get_sheet_data(client, spreadsheet_id, worksheet_name)
+        # candidate_row = existing_data[existing_data['CandidateName'] == candidate_name]
 
-        # Attempt to find existing data
-        existing_data = get_sheet_data(client, spreadsheet_id, worksheet_name)
-        candidate_row = existing_data[existing_data['CandidateName'] == candidate_name]
-
-        if not candidate_row.empty:
-            column_name = "Neuroticism-LLM-Answer"
-            neuroticism_data = candidate_row.iloc[0][column_name]  # Adjust based on actual column name
-            
-            
-        st.warning('🔍 Searching Candidate Data...')
-           # Simulate the delay of searching
-
-        # Conditionally show the result messages
-        
-        if neuroticism_data:  # Assuming 'openness_data' is defined and indicates if data was found
-            st.success('✅ Data found for the selected candidate.')
-            st.balloons()
-        else:
-            st.error('⚠️ You need to analyse the candidate data.')
-
-        
-
-                
-        if neuroticism_data:
-            try:
-                processed_scores = json.loads(neuroticism_data)
-                
-
-                #  
-                # st.success("✅ Data found for the selected candidate.")
-                # Plot the radar chart
-                fig = plot_pyplot_radar_chart2(processed_scores)
-                st.plotly_chart(fig)
-                
-                for criterion, details in processed_scores.items():
-                    score = details.get('score', 'No score provided')
-                    result_text = details.get('result_text', 'No details provided')
-                    
-                    # Use the criterion as the label for the expander. Show the score in the expander's label as well.
-                    with st.expander(f"{criterion} - Score: {score}"):
-                        # Inside the expander, display the detailed feedback text.
-                        st.write(result_text)
-                    
-
-                
-            except json.JSONDecodeError:
-                st.error("Error parsing the candidate's data. Please check the format.")
-                
-
-        else:
 
             if st.button("Analyze Neuroticism", key="start_neuroticism"):  # Unique key for this button
                 # Initialize the language model and prepare for evaluation
-                llm, negative_criteria_details, evaluation_prompt_template = get_llm_response_neuroticism(candidate_data['NEUROTICISM'])
+                llm, negative_criteria_details, evaluation_prompt_template = get_llm_response_neuroticism(formatted_data['Neuroticism'])
 
                 # Assuming OPENNESS text is directly used or you have a specific field from candidate_data
-                neuroticism_text = candidate_data['NEUROTICISM']
+                neuroticism_text = formatted_data['Neuroticism']
 
                 # Create and run sequential chain for the selected candidate
                 seq_chain = create_and_run_seq_chain("neuroticism",neuroticism_text, llm, negative_criteria_details, evaluation_prompt_template)
@@ -1433,13 +1369,19 @@ def main():
                             "result_text": result
                         }
 
-                success = save_scores_to_google_sheets(client, spreadsheet_id, worksheet_name, candidate_name, "Neuroticism-LLM-Answer",neuroticism_results_dict)
+                
+                st.write(formatted_data)
+                success = save_scores_to_postgres(formatted_data['candidate_unique_id'], formatted_data['Candidate Name'], "Neuroticism-LLM-Answer", neuroticism_results_dict)
 
+            
                 if success:
-                    st.toast('The Neuroticism score was successfully updated in Google Sheets.', icon='😍')
+                    st.toast('The Openness score was successfully updated in Database.', icon='😍')
+                    print("Yahoooo!")
                 else:
-                    print("There was an issue updating the Openness score in Google Sheets.")
+                    st.toast("There was an issue updating the Openness score in Database.")
                     
+
+                
     
 
         
