@@ -12,3 +12,4 @@ spacy==3.7.2
 SQLAlchemy==2.0.25
 streamlit==1.30.0
 redis==5.0.1
+psycopg2
